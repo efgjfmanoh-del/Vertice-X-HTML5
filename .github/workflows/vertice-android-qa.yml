@@ -104,7 +104,24 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
+      - name: Verificar SDK Android preinstalado e preparar API 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$SDK"
+          test -d "$SDK"
+          MANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$MANAGER" ]; then
+            MANAGER="$(find "$SDK/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          fi
+          test -x "$MANAGER"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          "$MANAGER" --version
+          "$MANAGER" --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          test -f "$SDK/platforms/android-35/android.jar"
+          test -x "$SDK/build-tools/35.0.0/apksigner"
       - working-directory: checkpoint
         run: |
           test "$(cat commit.txt)" = "${{ github.sha }}"
