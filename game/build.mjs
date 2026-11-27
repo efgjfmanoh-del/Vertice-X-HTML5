@@ -1,0 +1,1 @@
+import fs from 'node:fs';fs.copyFileSync('index.html','dist/index.html');fs.copyFileSync('icon.svg','dist/icon.svg');

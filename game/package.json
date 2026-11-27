@@ -1,0 +1,20 @@
+{
+  "name": "vertice-x",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test.mjs",
+    "build": "npm test && esbuild src/main.js --bundle --minify --format=iife --platform=browser --target=chrome100 --outfile=dist/game.js && node build.mjs"
+  },
+  "dependencies": {
+    "@babylonjs/core": "8.32.0",
+    "@capacitor/core": "7.0.0",
+    "@capacitor/android": "7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "7.0.0",
+    "esbuild": "0.25.12",
+    "playwright": "1.56.1"
+  }
+}

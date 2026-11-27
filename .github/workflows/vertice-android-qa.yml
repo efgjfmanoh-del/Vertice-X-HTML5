@@ -1,0 +1,152 @@
+name: Vertice X - Android QA 0.1.1
+on:
+  pull_request:
+    branches: [main]
+    paths: ['game/**', '.github/workflows/vertice-android-qa.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vx-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+jobs:
+  core-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar lógica e sprites sem instalar dependências
+        run: node --test game/test.mjs
+  build-web:
+    needs: core-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: game
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: vx-npm-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('game/package.json') }}
+      - name: Instalar dependências
+        run: |
+          set -o pipefail
+          npm install --no-audit --no-fund 2>&1 | tee /tmp/vx-npm.log
+      - name: Compilar e validar
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee /tmp/vx-build.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vx-build-diagnostics
+          path: |
+            /tmp/vx-npm.log
+            /tmp/vx-build.log
+          if-no-files-found: warn
+      - run: |
+          mkdir -p checkpoint
+          cp -r dist package.json package-lock.json capacitor.config.json android-config.py browser-test.mjs checkpoint/
+          printf '%s\n' "${{ github.sha }}" > checkpoint/commit.txt
+          printf '%s\n' "${{ github.run_id }}" > checkpoint/run.txt
+          cd checkpoint
+          find . -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/vx-sha256
+          mv /tmp/vx-sha256 SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vx-web-checkpoint
+          path: game/checkpoint/
+          if-no-files-found: error
+  visual-regression:
+    needs: build-web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: vx-web-checkpoint
+          path: checkpoint
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - working-directory: checkpoint
+        run: |
+          test "$(cat commit.txt)" = "${{ github.sha }}"
+          test "$(cat run.txt)" = "${{ github.run_id }}"
+          sha256sum -c SHA256SUMS
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          node browser-test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vx-capturas-reais
+          path: checkpoint/evidence/
+          if-no-files-found: warn
+  android-qa:
+    needs: [build-web, visual-regression]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: vx-web-checkpoint
+          path: checkpoint
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Verificar SDK Android preinstalado e preparar API 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$SDK"
+          test -d "$SDK"
+          MANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$MANAGER" ]; then
+            MANAGER="$(find "$SDK/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          fi
+          test -x "$MANAGER"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          "$MANAGER" --version
+          "$MANAGER" --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          test -f "$SDK/platforms/android-35/android.jar"
+          test -x "$SDK/build-tools/35.0.0/apksigner"
+      - working-directory: checkpoint
+        run: |
+          test "$(cat commit.txt)" = "${{ github.sha }}"
+          test "$(cat run.txt)" = "${{ github.run_id }}"
+          sha256sum -c SHA256SUMS
+          npm ci --no-audit --no-fund
+          npx cap add android
+          npx cap sync android
+          python3 android-config.py
+      - working-directory: checkpoint/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+      - run: |
+          mkdir -p delivery
+          cp checkpoint/android/app/build/outputs/apk/debug/app-debug.apk delivery/Vertice-X-0.1.1-QA.apk
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs delivery/Vertice-X-0.1.1-QA.apk > delivery/signature.txt
+          cd delivery
+          sha256sum Vertice-X-0.1.1-QA.apk > SHA256SUMS
+          printf '%s\n' "${{ github.sha }}" > commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vertice-X-Android-QA
+          path: delivery/
+          if-no-files-found: error
+          retention-days: 14
