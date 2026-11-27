@@ -1,0 +1,44 @@
+// Real Babylon meshes, shared materials and original procedural textures.
+export function buildDistrict(B,scene,blocks,shadows){
+let seed=823;const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};
+const V=(x,y,z)=>new B.Vector3(x,y,z),col=c=>B.Color3.FromHexString(c);
+function mat(n,c,em=0){const m=new B.StandardMaterial(n,scene);m.diffuseColor=col(c);m.specularColor=new B.Color3(.035,.045,.05);if(em)m.emissiveColor=col(c).scale(em);return m}
+function pattern(n,base,kind){const t=new B.DynamicTexture(n,{width:256,height:256},scene,true,B.Texture.TRILINEAR_SAMPLINGMODE);const c=t.getContext();c.fillStyle=base;c.fillRect(0,0,256,256);for(let i=0;i<2200;i++){c.fillStyle=i%2?'rgba(255,255,255,.075)':'rgba(0,0,0,.09)';c.fillRect(rand()*256,rand()*256,1+rand()*3,1+rand()*3)}if(kind==='pave'||kind==='brick'||kind==='tile'){const h=kind==='brick'?24:32,w=kind==='brick'?64:32;c.strokeStyle='rgba(28,26,25,.27)';c.lineWidth=2;for(let y=0;y<256;y+=h){c.beginPath();c.moveTo(0,y);c.lineTo(256,y);c.stroke();for(let x=-(Math.floor(y/h)%2)*w/2;x<256;x+=w){c.beginPath();c.moveTo(x,y);c.lineTo(x,y+h);c.stroke()}}}t.update();t.wrapU=t.wrapV=B.Texture.WRAP_ADDRESSMODE;return t}
+function texMat(n,base,kind){const a=mat(n,'#ffffff');a.diffuseTexture=pattern(n,base,kind);return a}
+const M={asphalt:texMat('asfalto granular','#495057','grain'),pave:texMat('calçada de pedra','#a8a095','pave'),plaza:texMat('praça de mosaico','#ada99b','pave'),grass:texMat('grama urbana','#5e7750','grain'),brick:texMat('tijolo terracota','#a75f4c','brick'),cream:texMat('reboco creme','#dac4a1','grain'),blue:texMat('reboco azul','#6e9296','grain'),rose:texMat('reboco rosa','#b48a80','grain'),tile:texMat('telhas de barro','#aa523d','tile'),roof:texMat('telhado grafite','#495760','tile'),trim:mat('moldura clara','#e4d6bb'),wood:mat('madeira','#655043'),door:mat('porta verde','#285b59'),dark:mat('ferro','#303c40'),glass:mat('vidro verde','#3e6870',.13),warm:mat('janela quente','#f5c77e',.45),paint:mat('sinalização','#eee2c6'),curb:mat('meio fio','#c4c0ad'),green:mat('copa','#467944'),leaf:mat('copa clara','#71924d'),deep:mat('copa sombra','#365c43'),flower:mat('flores','#df8b60'),purple:mat('luzes do portal','#a47be8',.6),red:mat('fachada cafeteria','#9c4542'),water:mat('água fonte','#3e8790',.13)};
+let parts=0;const groups=new Map();function own(mesh,material,cast=true){mesh.material=material;mesh.receiveShadows=true;mesh.isPickable=false;parts++;const key=material.name+'|'+cast;if(!groups.has(key))groups.set(key,{material,cast,list:[]});groups.get(key).list.push(mesh);return mesh}
+function box(n,x,y,z,w,h,d,mat,cast=true,rz=0){const o=B.MeshBuilder.CreateBox(n,{width:w,height:h,depth:d},scene);o.position.set(x,y,z);o.rotation.z=rz;return own(o,mat,cast)}
+function cyl(n,x,y,z,h,d,mat,tess=12){const o=B.MeshBuilder.CreateCylinder(n,{height:h,diameter:d,tessellation:tess},scene);o.position.set(x,y,z);return own(o,mat)}
+function foliage(x,y,z,r,mat){const o=B.MeshBuilder.CreateIcoSphere('copa',{radius:r,subdivisions:2},scene);o.position.set(x,y,z);o.scaling.set(1,.86,1);return own(o,mat)}
+function ground(n,x,y,z,w,d,material,repeatX,repeatZ){const o=B.MeshBuilder.CreateGround(n,{width:w,height:d},scene);o.position.set(x,y,z);const uv=o.getVerticesData(B.VertexBuffer.UVKind);for(let i=0;i<uv.length;i+=2){uv[i]*=repeatX;uv[i+1]*=repeatZ}o.setVerticesData(B.VertexBuffer.UVKind,uv);return own(o,material,false)}
+ground('base contínua',0,-.035,0,84,84,M.grass,20,20);ground('avenida',0,0,0,9,34,M.asphalt,3,12);
+for(const x of [-5,5]){ground('calçada',x,.07,0,2.25,34,M.pave,1,17);box('meio fio',x+(x<0?1.05:-1.05),.035,0,.12,.15,34,M.curb,false);ground('passeio residencial',x<0?-11:11,.015,0,10,34,M.grass,4,14)}
+ground('praça',0,.025,10,8.6,14,M.plaza,4,7);
+for(let z=-16;z<4;z+=2.8)box('faixa central',0,.015,z,.11,.025,1.05,M.paint,false);
+for(const z of [-7,3])for(let i=-4;i<=4;i++)box('faixa pedestre',i*.76,.018,z,.42,.025,1.5,M.paint,false);
+function sign(n,x,y,z,w,base){const t=new B.DynamicTexture(n,{width:256,height:64},scene,false);const c=t.getContext();c.fillStyle=base;c.fillRect(0,0,256,64);c.strokeStyle='#e5cba2';c.lineWidth=3;c.strokeRect(4,4,248,56);c.fillStyle='#ffedd2';c.font='bold 29px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText(n,128,32,232);t.update();const a=mat('placa '+n,'#ffffff',.16);a.diffuseTexture=t;const p=B.MeshBuilder.CreatePlane(n,{width:w,height:w/4},scene);p.position.set(x,y,z);own(p,a,false)}
+function facade(x,z,w,d,h,wall,roof,shop,style){
+box('fundação',x,.09,z,w,.18,d,M.curb);box('paredes',x,h/2+.1,z,w,h,d,wall);
+const front=z-d/2;
+for(const side of [-1,1])box('pilar',x+side*(w/2-.12),h/2+.1,front-.035,.18,h,.16,M.trim);
+box('friso inferior',x,.35,front-.08,w,.18,.15,M.wood);box('cornija',x,h+.08,z,w+.2,.18,d+.18,M.trim);
+if(style==='gable'){const rise=w*.26,theta=Math.atan2(rise,w/2+.23),length=Math.hypot(w/2+.23,rise);for(const side of [-1,1]){box('água telhado',x+side*(w/4+.11),h+.1+rise/2,z,length,.15,d+.45,roof,true,-side*theta)}const verts=[-w/2,0,0,w/2,0,0,0,rise,0];for(const zz of [front,z+d/2]){const g=new B.Mesh('empena',scene);const vd=new B.VertexData();vd.positions=verts;vd.indices=[0,1,2,2,1,0];vd.normals=[0,0,-1,0,0,-1,0,0,-1];vd.uvs=[0,0,1,0,.5,1];vd.applyToMesh(g);g.position.set(x,h+.1,zz);own(g,wall)}box('cumeeira',x,h+.1+rise,z,.16,.16,d+.45,roof);box('chaminé',x+w*.22,h+.85,z+.6,.38,1.2,.45,M.brick)}
+else{box('laje',x,h+.2,z,w+.28,.28,d+.28,M.roof);for(const side of [-1,1]){box('parapeito',x,h+.44,z+side*d/2,w+.2,.22,.15,M.trim);box('parapeito lateral',x+side*w/2,h+.44,z,.15,.22,d,M.trim)}box('caixa técnica',x-.6,h+.64,z+.35,1.15,.65,1,M.dark)}
+const frontWindow=(xx,yy,ww,hh)=>{box('caixilho',xx,yy,front-.065,ww+.15,hh+.15,.12,M.wood);box('vidraça',xx,yy,front-.136,ww,hh,.055,rand()>.5?M.glass:M.warm);box('travessa',xx,yy,front-.173,ww,.055,.06,M.trim);box('montante',xx,yy,front-.174,.055,hh,.06,M.trim);box('peitoril',xx,yy-hh/2-.06,front-.17,ww+.22,.1,.25,M.trim)};
+box('portal porta',x,.98,front-.07,1.15,1.86,.14,M.trim);box('porta',x,.94,front-.155,.86,1.66,.09,shop?M.glass:M.door);box('maçaneta',x+.29,.88,front-.225,.065,.065,.07,M.warm);
+frontWindow(x-w*.30,1.16,.98,1.05);frontWindow(x+w*.30,1.16,.98,1.05);
+if(shop){box('letreiro base',x,2.05,front-.12,w-.4,.6,.13,M.dark);sign(shop,x,2.05,front-.2,w-.65,'#324f4c');for(let j=0;j<9;j++)box('toldo listrado',x-w/2+.35+j*(w-.7)/8,1.7,front-.35,(w-.7)/9,.08,.55,j%2?M.trim:M.red,false)}
+else for(const side of [-1,1]){box('floreira',x+side*w*.3,.54,front-.25,.95,.22,.26,M.wood);for(let q=-1;q<=1;q++)foliage(x+side*w*.3+q*.23,.69,front-.27,.12,q===0?M.flower:M.green)}
+for(let y=2.9;y<h-.35;y+=1.33){for(const side of [-1,1])frontWindow(x+side*w*.26,y,.8,.85)}
+const sx=x+(x<0?w/2:-w/2),signSide=x<0?1:-1;for(let y=1.25;y<h-.35;y+=1.35)for(let zz=z-d/2+.8;zz<z+d/2-.45;zz+=1.38){box('caixilho lateral',sx+signSide*.07,y,zz,.13,.92,.93,M.wood);box('vidro lateral',sx+signSide*.15,y,zz,.05,.73,.74,rand()>.45?M.glass:M.warm);box('peitoril lateral',sx+signSide*.16,y-.43,zz,.22,.1,.99,M.trim)}
+}
+const specs=[[3.45,M.cream,M.tile,'','gable'],[4.8,M.brick,M.roof,'CAFÉ AURORA','flat'],[3.7,M.blue,M.tile,'','gable'],[4.35,M.rose,M.roof,'MERCEARIA','flat'],[3.3,M.cream,M.tile,'','gable'],[4.2,M.brick,M.roof,'OFICINA','flat']];blocks.forEach(([x,z,w,d],i)=>facade(x,z,w,d,...specs[i]));
+for(const x of [-4.7,4.7])for(const z of [-13,-3,6,14]){box('canteiro base',x,.17,z,1.15,.34,1.15,M.curb);box('terra do canteiro',x,.35,z,.92,.08,.92,M.wood);cyl('tronco',x,1.02,z,1.6,.23,M.wood,8);for(const [dx,dy,dz,r] of [[0,2.05,0,.78],[.4,1.82,.08,.55],[-.35,1.9,.18,.58],[.04,2.42,-.15,.5]])foliage(x+dx,dy,z+dz,r,dy>2.1?M.leaf:M.green);const lx=x+(x<0?.65:-.65);cyl('poste',lx,1.35,z+1.7,2.7,.1,M.dark);box('lanterna',lx,2.69,z+1.7,.32,.23,.32,M.warm);box('cúpula lanterna',lx,2.85,z+1.7,.42,.08,.42,M.dark)}
+for(let x=-3;x<=3;x+=1.5){cyl('balizador',x,.32,14.9,.64,.22,M.dark);cyl('topo balizador',x,.57,14.9,.1,.24,M.warm)}
+// A continuous visual horizon with enclosing walls at the actual gameplay bounds.
+for(const x of [-15.8,15.8])box('muro limite',x,.65,0,.45,1.3,34,M.brick);for(const z of [-16.8,16.8])box('muro limite',0,.65,z,32,1.3,.45,M.brick);
+for(const x of [-19,19])for(let z=-24;z<=24;z+=4){cyl('árvore externa',x,1.1,z,2.2,.25,M.wood);foliage(x,2.8,z,1.4,M.deep)}
+for(const z of [-20,20])for(let x=-14;x<=14;x+=4){cyl('árvore externa',x,1.1,z,2.2,.25,M.wood);foliage(x,2.8,z,1.4,M.green)}
+for(const {material,cast,list} of groups.values()){const a=list.length>1?B.Mesh.MergeMeshes(list,true,true,undefined,false,true):list[0];if(!a)throw Error('Falha ao agrupar '+material.name);a.receiveShadows=true;a.isPickable=false;a.freezeWorldMatrix();if(cast)shadows.addShadowCaster(a,false)}
+return {parts,groups:groups.size};
+}

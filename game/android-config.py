@@ -17,5 +17,20 @@ d=p.parent/'res/drawable';d.mkdir(parents=True,exist_ok=True)
 <path android:fillColor="#FFFFFF" android:pathData="M256,65 L271,92 L256,120 L241,92 Z"/>
 </vector>""")
 g=pathlib.Path('android/app/build.gradle');t=g.read_text()
-t,n=re.subn(r'versionName\s+"[^"]+"','versionName "0.1.0"',t);assert n==1
+t,n=re.subn(r'versionName\s+"[^"]+"','versionName "0.1.1"',t);assert n==1
 g.write_text(t)
+
+t,n=re.subn(r'versionCode\s+\d+','versionCode 2',t);assert n==1
+g.write_text(t)
+java=next(pathlib.Path('android/app/src/main/java').rglob('MainActivity.java'))
+js=java.read_text();assert 'extends BridgeActivity' in js
+js=js.replace('extends BridgeActivity {}','''extends BridgeActivity {
+    @Override public void onCreate(android.os.Bundle state) { super.onCreate(state); immersive(); }
+    @Override public void onWindowFocusChanged(boolean focused) { super.onWindowFocusChanged(focused); if(focused) immersive(); }
+    private void immersive() {
+        if(android.os.Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController c=getWindow().getInsetsController();
+            if(c!=null) { c.hide(android.view.WindowInsets.Type.systemBars()); c.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE); }
+        } else { getWindow().getDecorView().setSystemUiVisibility(5894); }
+    }
+}''');assert 'private void immersive()' in js;java.write_text(js)
