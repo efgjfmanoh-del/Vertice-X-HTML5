@@ -1,0 +1,8 @@
+{
+  "appId": "br.com.efg.verticex.qa",
+  "appName": "Vertice X QA",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  }
+}
